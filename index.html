@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1024" />
+<title>Orchard Volunteer Dashboard</title>
+<style>
+  :root {
+    --green:    #2f6b2a;
+    --green-dk: #235020;
+    --green-lt: #e6efe4;
+    --bg:       #f5f7f4;
+    --text:     #1f2a1d;
+    --muted:    #5a6656;
+    --border:   #c9d3c5;
+    --red:      #a13434;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    min-width: 1024px;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .app-header {
+    background: var(--green);
+    color: #fff;
+    padding: 16px 28px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .app-header h1 { font-size: 26px; font-weight: 700; }
+  .app-header p  { font-size: 14px; opacity: .75; }
+
+  /* ── Tab bar ── */
+  .tab-bar { display: flex; background: var(--green-dk); }
+  .tab-btn {
+    padding: 15px 36px;
+    background: none;
+    border: none;
+    color: rgba(255,255,255,.65);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+  }
+  .tab-btn.active { color: #fff; border-bottom-color: #8bc34a; }
+  .tab-btn:hover  { color: rgba(255,255,255,.9); }
+
+  /* ── Tab panels ── */
+  .tab-panel { display: none; padding: 24px 28px; max-width: 1200px; margin: 0 auto; }
+  .tab-panel.active { display: block; }
+
+  /* ── Two-column layout ── */
+  .two-col {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .card-head {
+    background: var(--green-lt);
+    padding: 12px 18px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--green-dk);
+    border-bottom: 1px solid var(--border);
+  }
+  .card-body { padding: 18px; }
+
+  /* ── Fields ── */
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .field input,
+  .field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cfd5db;
+    border-radius: 8px;
+    font-size: 15px;
+    background: #fff;
+    color: var(--text);
+  }
+  .field input:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(47,107,42,.12);
+  }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  /* ── Search ── */
+  .search-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .search-row input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #cfd5db;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+  .search-row input:focus {
+    outline: none;
+    border-color: var(--green);
+    box-shadow: 0 0 0 3px rgba(47,107,42,.12);
+  }
+
+  .results-list {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+    background: #fff;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  .result-item {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .result-item:last-child { border-bottom: none; }
+  .result-item:hover { background: var(--green-lt); }
+  .result-name { font-weight: 600; font-size: 15px; }
+  .result-sub  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 11px 18px;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-green  { background: var(--green); color: #fff; }
+  .btn-green:hover { background: var(--green-dk); }
+  .btn-green:disabled { background: #8ea787; cursor: not-allowed; }
+  .btn-outline { background: #fff; color: var(--text); border: 1px solid #cfd5db; }
+  .btn-outline:hover { background: var(--bg); }
+  .btn-full   { width: 100%; padding: 13px; font-size: 16px; }
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+  .btn-row .btn-green { flex: 1; }
+
+  /* ── Mode badge ── */
+  .mode-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 14px;
+  }
+  .badge-add  { background: #e0f0dd; color: var(--green-dk); }
+  .badge-edit { background: #fff3cd; color: #856404; }
+
+  /* ── Status messages ── */
+  .status {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 10px;
+    display: none;
+  }
+  .status.success { background: #e0f0dd; color: var(--green-dk); display: block; }
+  .status.error   { background: #f7dfdf; color: var(--red);       display: block; }
+
+  /* ── Checkbox ── */
+  .check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--green-lt);
+    border-radius: 8px;
+  }
+  .check-row input  { width: 20px; height: 20px; flex-shrink: 0; }
+  .check-row label  { font-size: 15px; font-weight: 500; cursor: pointer; }
+
+  /* ── Stake label bar ── */
+  .stake-bar {
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: var(--green-lt);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--green-dk);
+    font-weight: 600;
+  }
+  .stake-bar span { font-weight: 400; }
+
+  /* ── Live tab ── */
+  .live-layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .live-count-block {
+    background: var(--green-lt);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 28px 16px;
+    text-align: center;
+  }
+  .total-count {
+    font-size: 80px;
+    font-weight: 700;
+    color: var(--green-dk);
+    line-height: 1;
+  }
+  .total-label {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .shift-pill {
+    display: inline-block;
+    padding: 5px 16px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .pill-am   { background: #fff3cd; color: #856404; }
+  .pill-pm   { background: #cfe2ff; color: #084298; }
+  .pill-none { background: #e2e3e5; color: #41464b; }
+
+  .checkin-table { width: 100%; border-collapse: collapse; font-size: 16px; }
+  .checkin-table th {
+    background: var(--green);
+    color: #fff;
+    padding: 11px 16px;
+    text-align: left;
+    font-size: 15px;
+  }
+  .checkin-table th:last-child { text-align: right; }
+  .checkin-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .checkin-table td:last-child { text-align: right; font-weight: 700; font-size: 18px; }
+  .checkin-table tbody tr:last-child td { border-bottom: none; }
+  .checkin-table tfoot td {
+    background: var(--green-lt);
+    font-weight: 700;
+    font-size: 18px;
+    border-top: 2px solid var(--border);
+  }
+
+  .no-data { text-align: center; padding: 32px; color: var(--muted); font-size: 15px; }
+  .refresh-note { font-size: 12px; color: var(--muted); text-align: right; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>Orchard Volunteer Dashboard</h1>
+  <p>Staff management tools</p>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="volunteers">Volunteers</button>
+  <button class="tab-btn"        data-tab="leaders">Stake Leaders</button>
+  <button class="tab-btn"        data-tab="live">Live Check-ins</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB 1 · Volunteers                                        -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-volunteers" class="tab-panel active">
+  <div class="two-col">
+
+    <div class="card">
+      <div class="card-head">Search Volunteers</div>
+      <div class="card-body">
+        <div class="search-row">
+          <input id="v-search" type="text" placeholder="Type a name to search…" />
+          <button class="btn btn-green" onclick="searchVolunteers()">Search</button>
+        </div>
+        <div id="v-results" class="results-list"></div>
+        <button class="btn btn-outline btn-full" onclick="clearVolForm()">+ Add New Volunteer</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">Volunteer Details</div>
+      <div class="card-body">
+        <div id="v-badge" class="mode-badge badge-add">Adding New Volunteer</div>
+        <input type="hidden" id="v-id" />
+
+        <div class="field-row">
+          <div class="field">
+            <label>Full Name *</label>
+            <input id="v-name" type="text" placeholder="e.g. Jordan Smith" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Missionary Type *</label>
+            <select id="v-type">
+              <option value="">— select —</option>
+              <option value="Service">Service</option>
+              <option value="Full-time">Full-time</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Stake</label>
+          <select id="v-stake"><option value="">— loading… —</option></select>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Phone</label>
+            <input id="v-phone" type="tel" placeholder="801-555-1234" />
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input id="v-email" type="email" placeholder="name@example.com" />
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-green" id="v-save" onclick="saveVolunteer()">Save Volunteer</button>
+          <button class="btn btn-outline" onclick="clearVolForm()">Clear</button>
+        </div>
+        <div id="v-status" class="status"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB 2 · Stake Leaders                                     -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-leaders" class="tab-panel">
+  <div class="two-col">
+
+    <div class="card">
+      <div class="card-head">Select a Stake</div>
+      <div class="card-body">
+        <div class="field">
+          <label>Stake</label>
+          <select id="l-stake-select" onchange="loadLeadersForStake()">
+            <option value="">— pick a stake —</option>
+          </select>
+        </div>
+        <div id="l-results" class="results-list"></div>
+        <button class="btn btn-outline btn-full" onclick="clearLeaderForm()" style="margin-top:12px;">+ Add New Leader for Selected Stake</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">Stake Leader Details</div>
+      <div class="card-body">
+        <div id="l-badge" class="mode-badge badge-add">Select a stake to begin</div>
+        <input type="hidden" id="l-id" />
+        <input type="hidden" id="l-stake-id" />
+        <input type="hidden" id="l-stake-key" />
+
+        <div class="stake-bar">Stake: <span id="l-stake-label">—</span></div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Full Name *</label>
+            <input id="l-name" type="text" placeholder="e.g. Robert Jones" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label>Position</label>
+            <input id="l-position" type="text" placeholder="e.g. High Council" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Phone</label>
+            <input id="l-phone" type="tel" placeholder="801-555-1234" />
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input id="l-email" type="email" placeholder="name@example.com" />
+          </div>
+        </div>
+
+        <div class="check-row">
+          <input id="l-active" type="checkbox" checked />
+          <label for="l-active">Active — receives daily volunteer count emails</label>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-green" id="l-save" onclick="saveLeader()">Save Stake Leader</button>
+          <button class="btn btn-outline" onclick="clearLeaderForm()">Clear</button>
+        </div>
+        <div id="l-status" class="status"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB 3 · Live Check-ins                                    -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-live" class="tab-panel">
+  <div class="card">
+    <div class="card-head">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span>Live Shift Check-ins</span>
+        <span id="shift-pill" class="shift-pill pill-none">Detecting shift…</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="live-date" style="font-size:14px;color:var(--muted);margin-bottom:16px;"></div>
+      <div class="live-layout">
+        <div class="live-count-block">
+          <div id="live-total-count" class="total-count" style="display:none"></div>
+          <div id="live-total-label" class="total-label"  style="display:none">volunteers checked in</div>
+        </div>
+        <div>
+          <div id="live-table-wrap"><div class="no-data">Loading…</div></div>
+        </div>
+      </div>
+      <div id="live-refresh-note" class="refresh-note"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<script>
+const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
+const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
+
+const SHIFTS = [
+  { label:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
+  { label:"PM", days:[2,3,4,6],   start:17*60+30, end:19*60+30 },
+];
+const EARLY = 45;
+
+// ── API ───────────────────────────────────────────────────────
+async function api(method, table, body, params = "") {
+  const res = await fetch(`${SUPA_URL}/rest/v1/${table}${params}`, {
+    method,
+    headers: {
+      "apikey":        SUPA_KEY,
+      "Authorization": "Bearer " + SUPA_KEY,
+      "Content-Type":  "application/json",
+      "Prefer": method==="POST"||method==="PATCH" ? "return=representation" : "",
+    },
+    body: body ? JSON.stringify(body) : null,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && (data.message||data.error)) || res.statusText);
+  return data;
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "live") refreshLive();
+  });
+});
+
+// ── Stakes cache ──────────────────────────────────────────────
+let STAKES = [];
+
+async function loadStakes() {
+  try {
+    STAKES = await api("GET", "stakes", null, "?select=id,name&order=name.asc");
+    // Volunteer dropdown
+    const vs = document.getElementById("v-stake");
+    vs.innerHTML = '<option value="">— none —</option>';
+    STAKES.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.id; o.textContent = s.name;
+      vs.appendChild(o);
+    });
+    // Leader dropdown
+    populateLeaderStakeDropdown();
+  } catch(e) { console.error("Stakes:", e); }
+}
+
+function stakeName(id) {
+  const s = STAKES.find(s => String(s.id) === String(id));
+  return s ? s.name : "—";
+}
+
+// ════════════════════════════════════════════════════════════
+// VOLUNTEERS
+// ════════════════════════════════════════════════════════════
+function setVolStatus(msg, type) {
+  const el = document.getElementById("v-status");
+  el.textContent = msg; el.className = "status " + type;
+}
+
+function clearVolForm() {
+  ["v-id","v-name","v-phone","v-email"].forEach(i => document.getElementById(i).value = "");
+  document.getElementById("v-type").value  = "";
+  document.getElementById("v-stake").value = "";
+  document.getElementById("v-badge").textContent = "Adding New Volunteer";
+  document.getElementById("v-badge").className   = "mode-badge badge-add";
+  document.getElementById("v-status").className  = "status";
+  document.getElementById("v-save").textContent  = "Save Volunteer";
+  document.getElementById("v-results").style.display = "none";
+  document.getElementById("v-search").value = "";
+}
+
+function fillVolForm(v) {
+  document.getElementById("v-id").value    = v.id;
+  document.getElementById("v-name").value  = v.full_name || "";
+  document.getElementById("v-type").value  = v.missionary_type || "";
+  document.getElementById("v-stake").value = v.stake_id || "";
+  document.getElementById("v-phone").value = v.phone || "";
+  document.getElementById("v-email").value = v.email || "";
+  document.getElementById("v-badge").textContent = "Editing: " + v.full_name;
+  document.getElementById("v-badge").className   = "mode-badge badge-edit";
+  document.getElementById("v-save").textContent  = "Update Volunteer";
+  document.getElementById("v-results").style.display = "none";
+  document.getElementById("v-status").className  = "status";
+}
+
+async function searchVolunteers() {
+  const q = document.getElementById("v-search").value.trim();
+  if (!q) return;
+  const el = document.getElementById("v-results");
+  el.innerHTML = "<div class='result-item'>Searching…</div>";
+  el.style.display = "block";
+  try {
+    const rows = await api("GET", "volunteers", null,
+      `?select=id,full_name,missionary_type,stake_id,phone,email&full_name_key=ilike.*${encodeURIComponent(q.toLowerCase())}*&order=full_name.asc&limit=25`
+    );
+    if (!rows.length) {
+      el.innerHTML = "<div class='result-item' style='color:var(--muted)'>No volunteers found.</div>";
+      return;
+    }
+    el.innerHTML = "";
+    rows.forEach(v => {
+      const d = document.createElement("div");
+      d.className = "result-item";
+      d.innerHTML = `<div class="result-name">${v.full_name}</div>
+        <div class="result-sub">${v.missionary_type||"—"} · ${stakeName(v.stake_id)}</div>`;
+      d.onclick = () => fillVolForm(v);
+      el.appendChild(d);
+    });
+  } catch(e) {
+    el.innerHTML = `<div class='result-item' style='color:var(--red)'>Error: ${e.message}</div>`;
+  }
+}
+
+document.getElementById("v-search").addEventListener("keydown", e => { if(e.key==="Enter") searchVolunteers(); });
+
+async function saveVolunteer() {
+  const id    = document.getElementById("v-id").value;
+  const name  = document.getElementById("v-name").value.trim();
+  const type  = document.getElementById("v-type").value;
+  const stake = document.getElementById("v-stake").value;
+  const phone = document.getElementById("v-phone").value.trim();
+  const email = document.getElementById("v-email").value.trim();
+
+  if (!name) { setVolStatus("Full name is required.", "error"); return; }
+  if (!type) { setVolStatus("Please select a missionary type.", "error"); return; }
+
+  const payload = {
+    full_name:       name,
+    full_name_key:   name.toLowerCase().replace(/\s+/g," ").trim(),
+    missionary_type: type,
+  };
+  if (stake) payload.stake_id = parseInt(stake, 10);
+  if (phone) payload.phone = phone;
+  if (email) payload.email = email;
+
+  const btn = document.getElementById("v-save");
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    if (id) {
+      await api("PATCH", "volunteers", payload, `?id=eq.${id}`);
+      setVolStatus("✓ " + name + " updated.", "success");
+    } else {
+      await api("POST", "volunteers", payload);
+      setVolStatus("✓ " + name + " added.", "success");
+      clearVolForm();
+    }
+  } catch(e) { setVolStatus("Save failed: " + e.message, "error"); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = id ? "Update Volunteer" : "Save Volunteer";
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// STAKE LEADERS
+// ════════════════════════════════════════════════════════════
+function setLdrStatus(msg, type) {
+  const el = document.getElementById("l-status");
+  el.textContent = msg; el.className = "status " + type;
+}
+
+function populateLeaderStakeDropdown() {
+  const sel = document.getElementById("l-stake-select");
+  sel.innerHTML = '<option value="">— pick a stake —</option>';
+  STAKES.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s.id; o.textContent = s.name;
+    sel.appendChild(o);
+  });
+  const special = document.createElement("option");
+  special.value = "0"; special.textContent = "— Special / Non-Stake Roles —";
+  sel.appendChild(special);
+}
+
+async function loadLeadersForStake() {
+  const stakeId = document.getElementById("l-stake-select").value;
+  const el = document.getElementById("l-results");
+  clearLeaderForm();
+
+  if (!stakeId) { el.style.display = "none"; return; }
+
+  el.innerHTML = "<div class='result-item'>Loading…</div>";
+  el.style.display = "block";
+
+  try {
+    let params;
+    if (stakeId === "0") {
+      params = `?select=id,leader_name,position,stake_system_name,stake_id,leader_phone,leader_email,is_active&stake_id=is.null&order=leader_name.asc`;
+    } else {
+      params = `?select=id,leader_name,position,stake_system_name,stake_id,leader_phone,leader_email,is_active&stake_id=eq.${stakeId}&order=leader_name.asc`;
+    }
+    const rows = await api("GET", "stake_leaders", null, params);
+
+    if (!rows.length) {
+      el.innerHTML = "<div class='result-item' style='color:var(--muted)'>No leaders found for this stake.</div>";
+      return;
+    }
+    el.innerHTML = "";
+    rows.forEach(l => {
+      const d = document.createElement("div");
+      d.className = "result-item";
+      d.innerHTML = `<div class="result-name">${l.leader_name}</div>
+        <div class="result-sub">${l.position||"—"} · ${l.is_active ? "Active" : "Inactive"}</div>`;
+      d.onclick = () => fillLeaderForm(l);
+      el.appendChild(d);
+    });
+  } catch(e) {
+    el.innerHTML = `<div class='result-item' style='color:var(--red)'>Error: ${e.message}</div>`;
+  }
+}
+
+function clearLeaderForm() {
+  ["l-id","l-stake-id","l-stake-key","l-name","l-position","l-phone","l-email"]
+    .forEach(i => document.getElementById(i).value = "");
+  document.getElementById("l-active").checked   = true;
+  document.getElementById("l-badge").textContent = "Select a stake to begin";
+  document.getElementById("l-badge").className   = "mode-badge badge-add";
+  document.getElementById("l-status").className  = "status";
+  document.getElementById("l-save").textContent  = "Save Stake Leader";
+  document.getElementById("l-stake-label").textContent = "—";
+
+  const sel = document.getElementById("l-stake-select");
+  if (sel.value) {
+    if (sel.value === "0") {
+      document.getElementById("l-stake-label").textContent = "Special / Non-Stake Role";
+      document.getElementById("l-badge").textContent = "Adding Special Role";
+    } else {
+      const stake = STAKES.find(s => String(s.id) === sel.value);
+      if (stake) {
+        document.getElementById("l-stake-id").value  = stake.id;
+        document.getElementById("l-stake-key").value = stake.name;
+        document.getElementById("l-stake-label").textContent = stake.name;
+        document.getElementById("l-badge").textContent = "Adding New Leader — " + stake.name;
+      }
+    }
+  }
+}
+
+function fillLeaderForm(l) {
+  const stake = STAKES.find(s => String(s.id) === String(l.stake_id));
+  document.getElementById("l-id").value        = l.id;
+  document.getElementById("l-stake-id").value  = l.stake_id || "";
+  document.getElementById("l-stake-key").value = l.stake_system_name || "";
+  document.getElementById("l-name").value      = l.leader_name  || "";
+  document.getElementById("l-position").value  = l.position     || "";
+  document.getElementById("l-phone").value     = l.leader_phone || "";
+  document.getElementById("l-email").value     = l.leader_email || "";
+  document.getElementById("l-active").checked  = l.is_active !== false;
+  document.getElementById("l-stake-label").textContent = stake ? stake.name : (l.stake_system_name || "—");
+  document.getElementById("l-badge").textContent = "Editing: " + l.leader_name;
+  document.getElementById("l-badge").className   = "mode-badge badge-edit";
+  document.getElementById("l-save").textContent  = "Update Stake Leader";
+  document.getElementById("l-status").className  = "status";
+}
+
+async function saveLeader() {
+  const id       = document.getElementById("l-id").value;
+  const stakeId  = document.getElementById("l-stake-id").value;
+  const stakeKey = document.getElementById("l-stake-key").value;
+  const name     = document.getElementById("l-name").value.trim();
+  const position = document.getElementById("l-position").value.trim();
+  const phone    = document.getElementById("l-phone").value.trim();
+  const email    = document.getElementById("l-email").value.trim();
+  const isActive = document.getElementById("l-active").checked;
+
+  if (!name)               { setLdrStatus("Full name is required.", "error"); return; }
+  if (!stakeKey && !id)    { setLdrStatus("Please select a stake first.", "error"); return; }
+
+  const payload = { leader_name: name, is_active: isActive };
+  if (stakeId && stakeId !== "0") payload.stake_id          = parseInt(stakeId, 10);
+  if (stakeKey)                   payload.stake_system_name = stakeKey;
+  if (position)                   payload.position          = position;
+  if (phone)                      payload.leader_phone      = phone;
+  if (email)                      payload.leader_email      = email;
+
+  const btn = document.getElementById("l-save");
+  btn.disabled = true; btn.textContent = "Saving…";
+  try {
+    if (id) {
+      await api("PATCH", "stake_leaders", payload, `?id=eq.${id}`);
+      setLdrStatus("✓ " + name + " updated.", "success");
+      loadLeadersForStake();
+    } else {
+      await api("POST", "stake_leaders", payload);
+      setLdrStatus("✓ " + name + " added successfully.", "success");
+      clearLeaderForm();
+      loadLeadersForStake();
+    }
+  } catch(e) { setLdrStatus("Save failed: " + e.message, "error"); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = id ? "Update Stake Leader" : "Save Stake Leader";
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// LIVE CHECK-INS
+// ════════════════════════════════════════════════════════════
+function getMTInfo() {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone:"America/Denver",
+    year:"numeric", month:"2-digit", day:"2-digit",
+    weekday:"short", hour:"2-digit", minute:"2-digit", hour12:false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p=>[p.type,p.value]));
+  const dateStr = `${parts.year}-${parts.month}-${parts.day}`;
+  const DOW = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
+  const dow = DOW[parts.weekday];
+  const nowMin = parseInt(parts.hour,10)*60 + parseInt(parts.minute,10);
+  let shift = null;
+  for (const w of SHIFTS) {
+    if (w.days.includes(dow) && nowMin>=(w.start-EARLY) && nowMin<=w.end) {
+      shift = w.label; break;
+    }
+  }
+  const friendly = new Date().toLocaleDateString("en-US",
+    {timeZone:"America/Denver",month:"long",day:"numeric",year:"numeric"});
+  return { dateStr, shift, friendly };
+}
+
+async function refreshLive() {
+  const wrap = document.getElementById("live-table-wrap");
+  const pill = document.getElementById("shift-pill");
+  const note = document.getElementById("live-refresh-note");
+  const tcEl = document.getElementById("live-total-count");
+  const tlEl = document.getElementById("live-total-label");
+
+  const { dateStr, shift, friendly } = getMTInfo();
+  document.getElementById("live-date").textContent = friendly;
+
+  if (shift==="AM")      { pill.textContent="AM Shift"; pill.className="shift-pill pill-am"; }
+  else if (shift==="PM") { pill.textContent="PM Shift"; pill.className="shift-pill pill-pm"; }
+  else                   { pill.textContent="No Active Shift"; pill.className="shift-pill pill-none"; }
+
+  try {
+    let params = `?select=stake,count&serviceDate=eq.${dateStr}`;
+    if (shift) params += `&shift=eq.${shift}`;
+
+    const rows = await api("GET", "hours_ledger", null, params);
+    const map  = {};
+    (rows||[]).forEach(r => {
+      const s = (r.stake||"Unknown").trim();
+      map[s] = (map[s]||0) + (parseInt(r.count,10)||0);
+    });
+
+    const stakeList = Object.keys(map).sort();
+    const grand = Object.values(map).reduce((a,b)=>a+b,0);
+
+    if (!stakeList.length) {
+      tcEl.style.display = "none"; tlEl.style.display = "none";
+      wrap.innerHTML = `<div class="no-data">${shift
+        ? "No check-ins yet for this shift."
+        : "Check-in data will appear during an active shift."}</div>`;
+    } else {
+      tcEl.textContent = grand;
+      tcEl.style.display = "block"; tlEl.style.display = "block";
+      let html = `<table class="checkin-table">
+        <thead><tr><th>Stake</th><th>Volunteers</th></tr></thead><tbody>`;
+      stakeList.forEach(s => { html += `<tr><td>${s}</td><td>${map[s]}</td></tr>`; });
+      html += `</tbody><tfoot><tr><td>Total</td><td>${grand}</td></tr></tfoot></table>`;
+      wrap.innerHTML = html;
+    }
+
+    const now = new Date().toLocaleTimeString("en-US",
+      {timeZone:"America/Denver",hour:"numeric",minute:"2-digit"});
+    note.textContent = "Updated " + now + " MT · refreshes every 30 sec";
+  } catch(e) {
+    tcEl.style.display = "none"; tlEl.style.display = "none";
+    wrap.innerHTML = `<div class="no-data" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+setInterval(() => {
+  if (document.getElementById("tab-live").classList.contains("active")) refreshLive();
+}, 30000);
+
+// ── Init ──────────────────────────────────────────────────────
+loadStakes();
+</script>
+</body>
+</html>
