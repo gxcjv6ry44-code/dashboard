@@ -949,7 +949,7 @@ async function loadCheckinRecords() {
   clearCheckinForm();
 
   try {
-    // Filter by created_at covering the full Mountain Time day
+    // Filter by created_on covering the full Mountain Time day
     // MT is UTC-7 (MDT) or UTC-6 (MST); use UTC-7 as safe lower bound
     const dateStart = date + "T06:00:00Z";  // midnight MT ≈ 6–7am UTC
     const nextDate  = new Date(date);
@@ -957,9 +957,9 @@ async function loadCheckinRecords() {
     const dateEnd   = nextDate.toISOString().slice(0,10) + "T06:00:00Z";
 
     const rows = await api("GET", "checkins", null,
-      `?select=id,count,submitted_by,youth_group,created_at,stake_id,stakes(id,name)` +
-      `&created_at=gte.${dateStart}&created_at=lt.${dateEnd}` +
-      `&order=created_at.asc`
+      `?select=id,count,submitted_by,youth_group,created_on,stake_id,stakes(id,name)` +
+      `&created_on=gte.${dateStart}&created_on=lt.${dateEnd}` +
+      `&order=created_on.asc`
     );
 
     if (!rows || !rows.length) {
@@ -970,7 +970,7 @@ async function loadCheckinRecords() {
     el.innerHTML = "";
     rows.forEach(r => {
       const sName = r.stakes?.name || "Unknown Stake";
-      const time  = new Date(r.created_at).toLocaleTimeString("en-US",
+      const time  = new Date(r.created_on).toLocaleTimeString("en-US",
         {timeZone:"America/Denver", hour:"numeric", minute:"2-digit"});
       const d = document.createElement("div");
       d.className = "result-item";
