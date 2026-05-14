@@ -482,7 +482,7 @@
 
         <div class="field-row">
           <div class="field">
-            <label>Shift</label>
+            <label>Check-in Time</label>
             <input id="ci-shift" type="text" readonly
               style="background:var(--bg);color:var(--muted);cursor:default;" />
           </div>
@@ -908,7 +908,7 @@ function populateCheckinStakeDropdown() {
   sel.innerHTML = '<option value="">— select stake —</option>';
   STAKES.forEach(s => {
     const o = document.createElement("option");
-    o.value = s.name; o.textContent = s.name;
+    o.value = s.id; o.textContent = s.name;
     sel.appendChild(o);
   });
 }
@@ -926,11 +926,14 @@ function clearCheckinForm() {
 }
 
 function fillCheckinForm(r) {
+  // r comes from the checkins table: stake_id (int), count, created_at
+  // stakeName and time are added by loadCheckinRecords before calling this
   document.getElementById("ci-id").value    = r.id;
-  document.getElementById("ci-stake").value = r.stake || "";
-  document.getElementById("ci-shift").value = r.shift || "";
+  document.getElementById("ci-stake").value = r.stake_id || "";
+  document.getElementById("ci-shift").value = r.time || "";   // display-only check-in time
   document.getElementById("ci-count").value = r.count ?? "";
-  document.getElementById("ci-badge").textContent = `Editing: ${r.stake||"Unknown"} · ${r.shift||""} · ${r.serviceDate||""}`;
+  const label = r.stakeName || stakeName(r.stake_id) || "Unknown";
+  document.getElementById("ci-badge").textContent = `Editing: ${label} · ${r.time || ""}`;
   document.getElementById("ci-badge").className   = "mode-badge badge-edit";
   document.getElementById("ci-status").className  = "status";
   document.getElementById("ci-save").textContent  = "Save Changes";
@@ -946,8 +949,17 @@ async function loadCheckinRecords() {
   clearCheckinForm();
 
   try {
-    const rows = await api("GET", "hours_ledger", null,
-      `?select=id,stake,shift,count,serviceDate&serviceDate=eq.${date}&order=shift.asc,stake.asc`
+    // Filter by created_at covering the full Mountain Time day
+    // MT is UTC-7 (MDT) or UTC-6 (MST); use UTC-7 as safe lower bound
+    const dateStart = date + "T06:00:00Z";  // midnight MT ≈ 6–7am UTC
+    const nextDate  = new Date(date);
+    nextDate.setDate(nextDate.getDate() + 1);
+    const dateEnd   = nextDate.toISOString().slice(0,10) + "T06:00:00Z";
+
+    const rows = await api("GET", "checkins", null,
+      `?select=id,count,submitted_by,youth_group,created_at,stake_id,stakes(id,name)` +
+      `&created_at=gte.${dateStart}&created_at=lt.${dateEnd}` +
+      `&order=created_at.asc`
     );
 
     if (!rows || !rows.length) {
@@ -957,15 +969,18 @@ async function loadCheckinRecords() {
 
     el.innerHTML = "";
     rows.forEach(r => {
+      const sName = r.stakes?.name || "Unknown Stake";
+      const time  = new Date(r.created_at).toLocaleTimeString("en-US",
+        {timeZone:"America/Denver", hour:"numeric", minute:"2-digit"});
       const d = document.createElement("div");
       d.className = "result-item";
       d.innerHTML = `
-        <div class="result-name">${r.stake || "Unknown Stake"}</div>
-        <div class="result-sub">${r.shift || "—"} shift · ${r.count ?? 0} volunteers</div>`;
+        <div class="result-name">${sName}</div>
+        <div class="result-sub">${r.count ?? 0} volunteers · checked in ${time}${r.youth_group ? " · Youth" : ""}</div>`;
       d.onclick = () => {
         document.querySelectorAll("#ci-list .result-item").forEach(el => el.classList.remove("active-item"));
         d.classList.add("active-item");
-        fillCheckinForm(r);
+        fillCheckinForm({...r, stakeName: sName, time});
       };
       el.appendChild(d);
     });
@@ -975,12 +990,12 @@ async function loadCheckinRecords() {
 }
 
 async function saveCheckin() {
-  const id    = document.getElementById("ci-id").value;
-  const stake = document.getElementById("ci-stake").value.trim();
-  const count = document.getElementById("ci-count").value;
+  const id      = document.getElementById("ci-id").value;
+  const stakeId = document.getElementById("ci-stake").value;
+  const count   = document.getElementById("ci-count").value;
 
-  if (!id)    { setCiStatus("No record selected.", "error"); return; }
-  if (!stake) { setCiStatus("Please select a stake.", "error"); return; }
+  if (!id)      { setCiStatus("No record selected.", "error"); return; }
+  if (!stakeId) { setCiStatus("Please select a stake.", "error"); return; }
   if (count === "" || isNaN(parseInt(count, 10)) || parseInt(count, 10) < 0) {
     setCiStatus("Please enter a valid volunteer count.", "error"); return;
   }
@@ -989,9 +1004,11 @@ async function saveCheckin() {
   btn.disabled = true; btn.textContent = "Saving…";
 
   try {
-    await api("PATCH", "hours_ledger", { stake, count: parseInt(count, 10) }, `?id=eq.${id}`);
+    await api("PATCH", "checkins",
+      { stake_id: parseInt(stakeId, 10), count: parseInt(count, 10) },
+      `?id=eq.${id}`
+    );
     setCiStatus("✓ Record updated.", "success");
-    // Refresh the list to show updated values
     loadCheckinRecords();
   } catch(e) {
     setCiStatus("Save failed: " + e.message, "error");
