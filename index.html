@@ -509,8 +509,8 @@ const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
 const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
 
 const SHIFTS = [
-  { label:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
-  { label:"PM", days:[2,3,4,6],   start:17*60+30, end:19*60+30 },
+  { label:"AM Volunteer", display:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
+  { label:"PM Volunteer", display:"PM", days:[2,3,4,6],   start:17*60+30, end:19*60+30 },
 ];
 const EARLY = 45;
 
@@ -849,8 +849,8 @@ async function refreshLive() {
   const { dateStr, shift, friendly } = getMTInfo();
   document.getElementById("live-date").textContent = friendly;
 
-  if (shift==="AM")      { pill.textContent="AM Shift"; pill.className="shift-pill pill-am"; }
-  else if (shift==="PM") { pill.textContent="PM Shift"; pill.className="shift-pill pill-pm"; }
+if (shift==="AM Volunteer") { pill.textContent="AM Shift"; pill.className="shift-pill pill-am"; }
+else if (shift==="PM Volunteer") { pill.textContent="PM Shift"; pill.className="shift-pill pill-pm"; }
   else                   { pill.textContent="No Active Shift"; pill.className="shift-pill pill-none"; }
 
   try {
