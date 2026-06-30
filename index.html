@@ -334,6 +334,11 @@
           <select id="v-stake"><option value="">— loading… —</option></select>
         </div>
 
+        <div class="check-row">
+          <input id="v-water-team" type="checkbox" />
+          <label for="v-water-team">Orchard Water Team member</label>
+        </div>
+
         <div class="field-row">
           <div class="field">
             <label>Phone</label>
@@ -580,8 +585,9 @@ function setVolStatus(msg, type) {
 
 function clearVolForm() {
   ["v-id","v-name","v-phone","v-email"].forEach(i => document.getElementById(i).value = "");
-  document.getElementById("v-type").value  = "";
-  document.getElementById("v-stake").value = "";
+  document.getElementById("v-type").value       = "";
+  document.getElementById("v-stake").value      = "";
+  document.getElementById("v-water-team").checked = false;
   document.getElementById("v-badge").textContent = "Adding New Volunteer";
   document.getElementById("v-badge").className   = "mode-badge badge-add";
   document.getElementById("v-status").className  = "status";
@@ -591,12 +597,13 @@ function clearVolForm() {
 }
 
 function fillVolForm(v) {
-  document.getElementById("v-id").value    = v.id;
-  document.getElementById("v-name").value  = v.full_name || "";
-  document.getElementById("v-type").value  = v.missionary_type || "";
-  document.getElementById("v-stake").value = v.stake_id || "";
-  document.getElementById("v-phone").value = v.phone || "";
-  document.getElementById("v-email").value = v.email || "";
+  document.getElementById("v-id").value         = v.id;
+  document.getElementById("v-name").value        = v.full_name || "";
+  document.getElementById("v-type").value        = v.missionary_type || "";
+  document.getElementById("v-stake").value       = v.stake_id || "";
+  document.getElementById("v-phone").value       = v.phone || "";
+  document.getElementById("v-email").value       = v.email || "";
+  document.getElementById("v-water-team").checked = !!v.water_team;
   document.getElementById("v-badge").textContent = "Editing: " + v.full_name;
   document.getElementById("v-badge").className   = "mode-badge badge-edit";
   document.getElementById("v-save").textContent  = "Update Volunteer";
@@ -612,7 +619,7 @@ async function searchVolunteers() {
   el.style.display = "block";
   try {
     const rows = await api("GET", "volunteers", null,
-      `?select=id,full_name,missionary_type,stake_id,phone,email&full_name_key=ilike.*${encodeURIComponent(q.toLowerCase())}*&order=full_name.asc&limit=25`
+      `?select=id,full_name,missionary_type,stake_id,phone,email,water_team&full_name_key=ilike.*${encodeURIComponent(q.toLowerCase())}*&order=full_name.asc&limit=25`
     );
     if (!rows.length) {
       el.innerHTML = "<div class='result-item' style='color:var(--muted)'>No volunteers found.</div>";
@@ -623,7 +630,7 @@ async function searchVolunteers() {
       const d = document.createElement("div");
       d.className = "result-item";
       d.innerHTML = `<div class="result-name">${v.full_name}</div>
-        <div class="result-sub">${v.missionary_type||"—"} · ${stakeName(v.stake_id)}</div>`;
+        <div class="result-sub">${v.missionary_type||"—"} · ${stakeName(v.stake_id)}${v.water_team ? " · 💧 Water Team" : ""}</div>`;
       d.onclick = () => fillVolForm(v);
       el.appendChild(d);
     });
@@ -645,10 +652,12 @@ async function saveVolunteer() {
   if (!name) { setVolStatus("Full name is required.", "error"); return; }
   if (!type) { setVolStatus("Please select a missionary type.", "error"); return; }
 
+  const waterTeam = document.getElementById("v-water-team").checked;
   const payload = {
     full_name:       name,
     full_name_key:   name.toLowerCase().replace(/\s+/g," ").trim(),
     missionary_type: type,
+    water_team:      waterTeam,
   };
   if (stake) payload.stake_id = parseInt(stake, 10);
   if (phone) payload.phone = phone;
