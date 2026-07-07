@@ -339,6 +339,11 @@
           <label for="v-water-team">Orchard Water Team member</label>
         </div>
 
+        <div class="check-row">
+          <input id="v-active" type="checkbox" checked />
+          <label for="v-active">Active — still serving. Uncheck when someone has left; this keeps their history without deleting it, and stops the missionary hours report from following up with them.</label>
+        </div>
+
         <div class="field-row">
           <div class="field">
             <label>Phone</label>
@@ -588,6 +593,7 @@ function clearVolForm() {
   document.getElementById("v-type").value       = "";
   document.getElementById("v-stake").value      = "";
   document.getElementById("v-water-team").checked = false;
+  document.getElementById("v-active").checked = true;
   document.getElementById("v-badge").textContent = "Adding New Volunteer";
   document.getElementById("v-badge").className   = "mode-badge badge-add";
   document.getElementById("v-status").className  = "status";
@@ -604,6 +610,7 @@ function fillVolForm(v) {
   document.getElementById("v-phone").value       = v.phone || "";
   document.getElementById("v-email").value       = v.email || "";
   document.getElementById("v-water-team").checked = !!v.water_team;
+  document.getElementById("v-active").checked = v.active !== false;
   document.getElementById("v-badge").textContent = "Editing: " + v.full_name;
   document.getElementById("v-badge").className   = "mode-badge badge-edit";
   document.getElementById("v-save").textContent  = "Update Volunteer";
@@ -619,7 +626,7 @@ async function searchVolunteers() {
   el.style.display = "block";
   try {
     const rows = await api("GET", "volunteers", null,
-      `?select=id,full_name,missionary_type,stake_id,phone,email,water_team&full_name_key=ilike.*${encodeURIComponent(q.toLowerCase())}*&order=full_name.asc&limit=25`
+      `?select=id,full_name,missionary_type,stake_id,phone,email,water_team,active&full_name_key=ilike.*${encodeURIComponent(q.toLowerCase())}*&order=full_name.asc&limit=25`
     );
     if (!rows.length) {
       el.innerHTML = "<div class='result-item' style='color:var(--muted)'>No volunteers found.</div>";
@@ -629,7 +636,7 @@ async function searchVolunteers() {
     rows.forEach(v => {
       const d = document.createElement("div");
       d.className = "result-item";
-      d.innerHTML = `<div class="result-name">${v.full_name}</div>
+      d.innerHTML = `<div class="result-name">${v.full_name}${v.active === false ? " · <span style='color:var(--red)'>Inactive</span>" : ""}</div>
         <div class="result-sub">${v.missionary_type||"—"} · ${stakeName(v.stake_id)}${v.water_team ? " · 💧 Water Team" : ""}</div>`;
       d.onclick = () => fillVolForm(v);
       el.appendChild(d);
@@ -653,11 +660,13 @@ async function saveVolunteer() {
   if (!type) { setVolStatus("Please select a missionary type.", "error"); return; }
 
   const waterTeam = document.getElementById("v-water-team").checked;
+  const active    = document.getElementById("v-active").checked;
   const payload = {
     full_name:       name,
     full_name_key:   name.toLowerCase().replace(/\s+/g," ").trim(),
     missionary_type: type,
     water_team:      waterTeam,
+    active:          active,
   };
   if (stake) payload.stake_id = parseInt(stake, 10);
   if (phone) payload.phone = phone;
