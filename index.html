@@ -204,6 +204,41 @@
   .check-row input  { width: 20px; height: 20px; flex-shrink: 0; }
   .check-row label  { font-size: 15px; font-weight: 500; cursor: pointer; }
 
+  /* ── Report cards ── */
+  .report-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .report-toolbar .field { margin-bottom: 0; width: 220px; }
+  .report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .report-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .report-card .rc-stake { font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+  .report-card .rc-count { font-size: 14px; color: var(--muted); margin-bottom: 8px; }
+  .report-card .rc-leader { font-size: 14px; margin-bottom: 2px; }
+  .report-card .rc-email  { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .report-card .rc-no-leader { font-size: 13px; color: var(--red); margin-bottom: 12px; }
+  .report-summary {
+    display: flex;
+    gap: 28px;
+    margin-bottom: 18px;
+    padding: 14px 18px;
+    background: var(--green-lt);
+    border-radius: 10px;
+  }
+  .report-summary .rs-num { font-size: 24px; font-weight: 700; color: var(--green-dk); }
+  .report-summary .rs-label { font-size: 12px; color: var(--muted); }
+
   /* ── Stake label bar ── */
   .stake-bar {
     margin-bottom: 14px;
@@ -287,6 +322,7 @@
   <button class="tab-btn active" data-tab="volunteers">Volunteers</button>
   <button class="tab-btn"        data-tab="leaders">Stake Leaders</button>
   <button class="tab-btn"        data-tab="live">Live Check-ins</button>
+  <button class="tab-btn"        data-tab="reports">Send Reports</button>
   <button class="tab-btn"        data-tab="checkins">Check-in Records</button>
 </div>
 
@@ -463,6 +499,26 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB · Send Reports                                         -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-reports" class="tab-panel">
+  <div class="card">
+    <div class="card-head">Stake Check-in Reports</div>
+    <div class="card-body">
+      <div class="report-toolbar">
+        <div class="field">
+          <label>Service Date</label>
+          <input id="rp-date" type="date" />
+        </div>
+        <button class="btn btn-green" onclick="loadReports()">Load Report</button>
+      </div>
+      <div id="rp-summary"></div>
+      <div id="rp-grid"><div class="no-data">Pick a date and click Load Report.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
 <!-- TAB 4 · Check-in Records                                  -->
 <!-- ══════════════════════════════════════════════════════════ -->
 <div id="tab-checkins" class="tab-panel">
@@ -518,6 +574,7 @@
 <script>
 const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
 const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
+const REPORT_WEBHOOK_URL = "https://hook.us2.make.com/fudy8etjhi3bmllcdshjut05uyhb1b97";
 
 const SHIFTS = [
   { label:"AM Volunteer", display:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
@@ -551,6 +608,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.classList.add("active");
     document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
     if (btn.dataset.tab === "live") refreshLive();
+    if (btn.dataset.tab === "reports") loadReports();
     if (btn.dataset.tab === "checkins") loadCheckinRecords();
   });
 });
@@ -836,6 +894,110 @@ async function saveLeader() {
 // ════════════════════════════════════════════════════════════
 // LIVE CHECK-INS
 // ════════════════════════════════════════════════════════════
+// ── Send Reports ──────────────────────────────────────────────
+function initReportDate() {
+  const el = document.getElementById("rp-date");
+  if (el && !el.value) {
+    const { dateStr } = getMTInfo();
+    el.value = dateStr;
+  }
+}
+
+async function loadReports() {
+  initReportDate();
+  const dateStr = document.getElementById("rp-date").value;
+  const grid = document.getElementById("rp-grid");
+  const summary = document.getElementById("rp-summary");
+  if (!dateStr) { grid.innerHTML = '<div class="no-data">Pick a date and click Load Report.</div>'; summary.innerHTML = ""; return; }
+
+  grid.innerHTML = '<div class="no-data">Loading…</div>';
+  summary.innerHTML = "";
+
+  try {
+    const rows = await api("GET", "hours_ledger", null,
+      `?select=stake,count,shift&serviceDate=eq.${dateStr}`);
+
+    const byStake = {};
+    (rows || []).forEach(r => {
+      const s = (r.stake || "Unknown").trim();
+      if (!byStake[s]) byStake[s] = { count: 0, shifts: new Set() };
+      byStake[s].count += (parseInt(r.count, 10) || 0);
+      if (r.shift) byStake[s].shifts.add(r.shift);
+    });
+
+    const stakeNames = Object.keys(byStake).sort();
+    if (!stakeNames.length) {
+      grid.innerHTML = '<div class="no-data">No check-ins recorded for this date.</div>';
+      return;
+    }
+
+    // Look up an active leader per stake
+    const leaders = await api("GET", "stake_leaders", null,
+      `?select=stake_id,leader_name,leader_email,position&is_active=eq.true`);
+
+    const grandTotal = stakeNames.reduce((a, s) => a + byStake[s].count, 0);
+    summary.innerHTML = `<div class="report-summary">
+      <div><div class="rs-num">${stakeNames.length}</div><div class="rs-label">Stakes</div></div>
+      <div><div class="rs-num">${grandTotal}</div><div class="rs-label">Total Volunteers</div></div>
+    </div>`;
+
+    let html = '<div class="report-grid">';
+    stakeNames.forEach(name => {
+      const info = byStake[name];
+      const stakeObj = STAKES.find(s => s.name === name);
+      const leader = stakeObj ? leaders.find(l => String(l.stake_id) === String(stakeObj.id)) : null;
+      const shiftList = Array.from(info.shifts).sort().join(", ") || "—";
+      const cardId = "rc-" + name.replace(/[^a-zA-Z0-9]/g, "");
+
+      html += `<div class="report-card" id="${cardId}">
+        <div class="rc-stake">${name}</div>
+        <div class="rc-count">${info.count} volunteer${info.count === 1 ? "" : "s"} · ${shiftList}</div>`;
+
+      if (leader && leader.leader_email) {
+        html += `<div class="rc-leader">${leader.leader_name || "Leader"}${leader.position ? " · " + leader.position : ""}</div>
+          <div class="rc-email">${leader.leader_email}</div>
+          <button class="btn btn-green btn-full" onclick="sendReport('${cardId}', ${JSON.stringify(name)}, ${info.count}, ${JSON.stringify(leader.leader_name || "")}, ${JSON.stringify(leader.leader_email)}, ${JSON.stringify(dateStr)}, ${JSON.stringify(shiftList)})">Send Report</button>`;
+      } else {
+        html += `<div class="rc-no-leader">No active leader on file for this stake.</div>
+          <button class="btn btn-outline btn-full" disabled>Send Report</button>`;
+      }
+      html += `</div>`;
+    });
+    html += "</div>";
+    grid.innerHTML = html;
+  } catch (e) {
+    grid.innerHTML = `<div class="no-data" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+async function sendReport(cardId, stakeName, count, leaderName, leaderEmail, dateStr, shiftList) {
+  const card = document.getElementById(cardId);
+  const btn = card.querySelector("button");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  try {
+    await fetch(REPORT_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stake_name: stakeName,
+        leader_name: leaderName,
+        leader_email: leaderEmail,
+        count: count,
+        date: dateStr,
+        shift: shiftList,
+      }),
+    });
+    btn.textContent = "\u2713 Sent";
+    btn.classList.remove("btn-green");
+    btn.classList.add("btn-outline");
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Send Report";
+    alert("Failed to send: " + e.message);
+  }
+}
+
 function getMTInfo() {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone:"America/Denver",
