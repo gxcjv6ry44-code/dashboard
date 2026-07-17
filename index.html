@@ -324,6 +324,7 @@
   <button class="tab-btn"        data-tab="live">Live Check-ins</button>
   <button class="tab-btn"        data-tab="reports">Send Reports</button>
   <button class="tab-btn"        data-tab="checkins">Check-in Records</button>
+  <button class="tab-btn"        data-tab="schedule">Schedule Review</button>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
@@ -571,10 +572,38 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════ -->
+<!-- TAB · Schedule Review                                      -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div id="tab-schedule" class="tab-panel">
+  <div class="card">
+    <div class="card-head">Next-Year Schedule Batches</div>
+    <div class="card-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+        Batches come from running the Excel-calendar ingestion script against next year's
+        approved schedule. Preview the diff against what's currently live before publishing --
+        Approve &amp; Publish replaces the live schedule for the batch's date range and pushes
+        the updated calendarByDate and stake-assignments sites to GitHub.
+      </p>
+      <div class="field">
+        <label>Batch</label>
+        <select id="sch-batch" onchange="onScheduleBatchChange()"></select>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" id="sch-preview-btn" onclick="previewScheduleBatch()">Preview Diff</button>
+        <button class="btn btn-green" id="sch-publish-btn" onclick="approveAndPublishSchedule()" disabled>Approve &amp; Publish</button>
+      </div>
+      <div id="sch-status" class="status"></div>
+      <div id="sch-summary" style="margin-top:16px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
 <script>
 const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
 const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
 const SEND_REPORT_FN_URL = `${SUPA_URL}/functions/v1/send-report`;
+const SCHEDULE_FN_URL = `${SUPA_URL}/functions/v1/publish-schedule`;
 
 const SHIFTS = [
   { label:"AM Volunteer", display:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
@@ -610,6 +639,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "live") refreshLive();
     if (btn.dataset.tab === "reports") loadReports();
     if (btn.dataset.tab === "checkins") loadCheckinRecords();
+    if (btn.dataset.tab === "schedule") loadScheduleBatches();
   });
 });
 
@@ -1207,6 +1237,134 @@ async function saveCheckin() {
   const parts = Object.fromEntries(fmt.formatToParts(new Date()).map(p=>[p.type,p.value]));
   document.getElementById("ci-date").value = `${parts.year}-${parts.month}-${parts.day}`;
 })();
+
+// ── Schedule Review ──────────────────────────────────────────
+let SCH_BATCHES = [];
+let SCH_LAST_PREVIEWED_BATCH = null;
+
+function setSchStatus(msg, type) {
+  const el = document.getElementById("sch-status");
+  el.textContent = msg;
+  el.className = "status" + (type ? " " + type : "");
+}
+
+async function loadScheduleBatches() {
+  setSchStatus("", "");
+  document.getElementById("sch-summary").innerHTML = "";
+  document.getElementById("sch-publish-btn").disabled = true;
+  SCH_LAST_PREVIEWED_BATCH = null;
+  try {
+    SCH_BATCHES = await api("GET", "schedule_import_batches", null,
+      "?status=in.(pending,approved)&order=imported_at.desc");
+  } catch (e) {
+    setSchStatus("Failed to load batches: " + e.message, "error");
+    SCH_BATCHES = [];
+  }
+  const sel = document.getElementById("sch-batch");
+  sel.innerHTML = "";
+  if (SCH_BATCHES.length === 0) {
+    sel.innerHTML = '<option value="">No pending batches</option>';
+    return;
+  }
+  SCH_BATCHES.forEach(b => {
+    const o = document.createElement("option");
+    o.value = b.id;
+    o.textContent = `${b.season_year} — ${b.source_filename || "(no filename)"} — ${b.status} — imported ${new Date(b.imported_at).toLocaleString()}`;
+    sel.appendChild(o);
+  });
+}
+
+function onScheduleBatchChange() {
+  document.getElementById("sch-summary").innerHTML = "";
+  document.getElementById("sch-publish-btn").disabled = true;
+  SCH_LAST_PREVIEWED_BATCH = null;
+  setSchStatus("", "");
+}
+
+async function callPublishFn(batchId, dryRun) {
+  const res = await fetch(SCHEDULE_FN_URL, {
+    method: "POST",
+    headers: {
+      "apikey": SUPA_KEY,
+      "Authorization": "Bearer " + SUPA_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ batch_id: batchId, dry_run: !!dryRun }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function renderDiffSummary(d) {
+  const diff = d.diff;
+  let html = `<div style="font-size:14px;line-height:1.6;">`;
+  html += `<strong>Season ${d.season_year || ""}</strong> — date range ${d.date_range[0]} to ${d.date_range[1]}<br/>`;
+  html += `Draft rows: <strong>${d.draft_row_count ?? d.rows_promoted ?? ""}</strong>, `;
+  html += `currently live in that range: <strong>${d.current_row_count_in_range ?? ""}</strong><br/>`;
+  html += `<span style="color:var(--green-dk)">+${diff.added_count} added</span> · `;
+  html += `<span style="color:#856404">${diff.changed_count} changed</span> · `;
+  html += `<span style="color:var(--red)">-${diff.removed_count} removed</span>`;
+  html += `</div>`;
+
+  const sampleTable = (title, rows, cols) => {
+    if (!rows.length) return "";
+    let t = `<div style="margin-top:12px;font-weight:700;font-size:13px;">${title} (showing up to ${rows.length})</div>`;
+    t += `<div class="results-list" style="display:block;max-height:220px;">`;
+    rows.forEach(r => {
+      t += `<div class="result-item" style="cursor:default;">${cols(r)}</div>`;
+    });
+    t += `</div>`;
+    return t;
+  };
+
+  html += sampleTable("Added", diff.added_sample, r => `${r.service_date} · ${r.phase} · ${r.stake_name} · ${r.people ?? "—"}`);
+  html += sampleTable("Changed", diff.changed_sample, r => `${r.key} · ${r.from_people ?? "—"} → ${r.to_people ?? "—"}`);
+  html += sampleTable("Removed", diff.removed_sample, r => `${r.service_date} · ${r.phase} · ${r.stake_name} · ${r.people ?? "—"}`);
+
+  document.getElementById("sch-summary").innerHTML = html;
+}
+
+async function previewScheduleBatch() {
+  const batchId = document.getElementById("sch-batch").value;
+  if (!batchId) return;
+  setSchStatus("Loading preview…", "");
+  document.getElementById("sch-publish-btn").disabled = true;
+  try {
+    const data = await callPublishFn(batchId, true);
+    renderDiffSummary(data);
+    setSchStatus("Preview loaded. Review the diff below, then Approve & Publish if it looks right.", "success");
+    SCH_LAST_PREVIEWED_BATCH = batchId;
+    document.getElementById("sch-publish-btn").disabled = false;
+  } catch (e) {
+    setSchStatus("Preview failed: " + e.message, "error");
+  }
+}
+
+async function approveAndPublishSchedule() {
+  const batchId = document.getElementById("sch-batch").value;
+  if (!batchId) return;
+  if (batchId !== SCH_LAST_PREVIEWED_BATCH) {
+    setSchStatus("Preview this batch first so you know what you're publishing.", "error");
+    return;
+  }
+  if (!confirm("This will replace the live schedule for this batch's date range and push the updated sites to GitHub. Continue?")) {
+    return;
+  }
+  const btn = document.getElementById("sch-publish-btn");
+  btn.disabled = true; btn.textContent = "Publishing…";
+  setSchStatus("Publishing…", "");
+  try {
+    const data = await callPublishFn(batchId, false);
+    renderDiffSummary({ diff: data.diff, date_range: data.date_range, rows_promoted: data.rows_promoted });
+    setSchStatus(`✓ Published. ${data.rows_promoted} rows live. calendarByDate commit ${(data.calendarByDate_commit||"").slice(0,7) || "?"}, stake-assignments commit ${(data.stakeAssignments_commit||"").slice(0,7) || "?"}.`, "success");
+    loadScheduleBatches();
+  } catch (e) {
+    setSchStatus("Publish failed: " + e.message, "error");
+  } finally {
+    btn.textContent = "Approve & Publish";
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────
 loadStakes();
