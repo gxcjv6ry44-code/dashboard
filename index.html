@@ -574,7 +574,7 @@
 <script>
 const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
 const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
-const REPORT_WEBHOOK_URL = "https://hook.us2.make.com/fudy8etjhi3bmllcdshjut05uyhb1b97";
+const SEND_REPORT_FN_URL = `${SUPA_URL}/functions/v1/send-report`;
 
 const SHIFTS = [
   { label:"AM Volunteer", display:"AM", days:[2,3,4,5,6], start: 8*60+30, end:10*60+30 },
@@ -976,18 +976,19 @@ async function sendReport(cardId, stakeName, count, leaderName, leaderEmail, dat
   btn.disabled = true;
   btn.textContent = "Sending…";
   try {
-    await fetch(REPORT_WEBHOOK_URL, {
+    const res = await fetch(SEND_REPORT_FN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        stake_name: stakeName,
-        leader_name: leaderName,
-        leader_email: leaderEmail,
-        count: count,
-        date: dateStr,
-        shift: shiftList,
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + SUPA_KEY,
+        "apikey": SUPA_KEY,
+      },
+      body: JSON.stringify({ stake: stakeName, date: dateStr }),
     });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data && data.error) || res.statusText);
+    const failed = (data.results || []).filter(r => r.status === "failed");
+    if (failed.length) throw new Error(failed.map(f => f.error).join("; "));
     btn.textContent = "\u2713 Sent";
     btn.classList.remove("btn-green");
     btn.classList.add("btn-outline");
