@@ -602,7 +602,6 @@
 <script>
 const SUPA_URL = "https://tfkdkekvtuqepjqsgjoc.supabase.co";
 const SUPA_KEY = "sb_publishable_JRFxF6A8mDcZX2D05CdoCQ_F6_rDbwh";
-const SEND_REPORT_FN_URL = `${SUPA_URL}/functions/v1/send-report`;
 const SCHEDULE_FN_URL = `${SUPA_URL}/functions/v1/publish-schedule`;
 
 const SHIFTS = [
@@ -985,11 +984,9 @@ async function loadReports() {
 
       if (leader && leader.leader_email) {
         html += `<div class="rc-leader">${leader.leader_name || "Leader"}${leader.position ? " · " + leader.position : ""}</div>
-          <div class="rc-email">${leader.leader_email}</div>
-          <button class="btn btn-green btn-full" onclick="sendReport('${cardId}', ${JSON.stringify(name)}, ${info.count}, ${JSON.stringify(leader.leader_name || "")}, ${JSON.stringify(leader.leader_email)}, ${JSON.stringify(dateStr)}, ${JSON.stringify(shiftList)})">Send Report</button>`;
+          <div class="rc-email">${leader.leader_email}</div>`;
       } else {
-        html += `<div class="rc-no-leader">No active leader on file for this stake.</div>
-          <button class="btn btn-outline btn-full" disabled>Send Report</button>`;
+        html += `<div class="rc-no-leader">No active leader on file for this stake.</div>`;
       }
       html += `</div>`;
     });
@@ -997,35 +994,6 @@ async function loadReports() {
     grid.innerHTML = html;
   } catch (e) {
     grid.innerHTML = `<div class="no-data" style="color:var(--red)">Error: ${e.message}</div>`;
-  }
-}
-
-async function sendReport(cardId, stakeName, count, leaderName, leaderEmail, dateStr, shiftList) {
-  const card = document.getElementById(cardId);
-  const btn = card.querySelector("button");
-  btn.disabled = true;
-  btn.textContent = "Sending…";
-  try {
-    const res = await fetch(SEND_REPORT_FN_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + SUPA_KEY,
-        "apikey": SUPA_KEY,
-      },
-      body: JSON.stringify({ stake: stakeName, date: dateStr }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error((data && data.error) || res.statusText);
-    const failed = (data.results || []).filter(r => r.status === "failed");
-    if (failed.length) throw new Error(failed.map(f => f.error).join("; "));
-    btn.textContent = "\u2713 Sent";
-    btn.classList.remove("btn-green");
-    btn.classList.add("btn-outline");
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = "Send Report";
-    alert("Failed to send: " + e.message);
   }
 }
 
