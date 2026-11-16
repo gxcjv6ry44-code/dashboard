@@ -540,7 +540,7 @@
     <div class="card">
       <div class="card-head">Year-End Report</div>
       <div class="card-body">
-        <p class="hr-note">Excel workbook with five tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake), Member Volunteers (by stake) and Member Volunteer Detail (every member check-in with stake, date, shift and hours).</p>
+        <p class="hr-note">Excel workbook with five tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake), Member Volunteers (by stake) and Member Volunteer Detail (every member check-in with name, stake, date, shift and hours).</p>
         <div class="hr-toolbar">
           <div class="field">
             <label>Year</label>
@@ -1437,14 +1437,14 @@ function hrLoadExcelLib() {
 // Stake totals from check-ins between two dates (inclusive)
 async function hrStakeTotals(from, to) {
   const rows = await hrFetchAll("hours_ledger",
-    `?select=stake,count,totalHours,youthGroup,serviceDate,shift&serviceDate=gte.${from}&serviceDate=lte.${to}&order=serviceDate,checkinId`);
+    `?select=stake,count,totalHours,youthGroup,serviceDate,shift,submittedBy&serviceDate=gte.${from}&serviceDate=lte.${to}&order=serviceDate,checkinId`);
   const youth = {}, member = {}, memberDetail = [];
   rows.forEach(r => {
     const hrs = r.totalHours != null ? Number(r.totalHours) : (parseInt(r.count, 10) || 0) * 2.5;
     const bucket = r.youthGroup ? youth : member;
     const name = hrPretty(r.stake);
     bucket[name] = (bucket[name] || 0) + hrs;
-    if (!r.youthGroup) memberDetail.push({ stake: name, date: r.serviceDate, shift: r.shift, hours: hrs });
+    if (!r.youthGroup) memberDetail.push({ name: hrCleanName(r.submittedBy), stake: name, date: r.serviceDate, shift: r.shift, hours: hrs });
   });
   return { youth, member, memberDetail };
 }
@@ -1519,6 +1519,16 @@ function hrAddSheet(wb, sheetName, title, subtitle, colHeaders, rows) {
   return ws;
 }
 
+// Same cleanup used for the 2026 member volunteer list: first-name-only or
+// non-name entries are shown as "(No name given)"
+const HR_NON_NAMES = new Set(["me","home","unkown","lots wife","randy","kim","jase","oakley","brina","doug","david","dianne","sandra","ashley","smith","treadway","mcconkie","erickson","cederlof","b rag","don and ben"]);
+const HR_NAME_FIX = { "Joseph Hillam scroll down a little bit": "Joseph Hillam", "Judy Hunt,": "Judy Hunt", "Williams, Rich": "Rich Williams" };
+function hrCleanName(n) {
+  const t = String(n || "").replace(/\s+/g, " ").trim();
+  if (!t || HR_NON_NAMES.has(t.toLowerCase())) return "(No name given)";
+  return HR_NAME_FIX[t] || t;
+}
+
 function hrShiftLabel(sh) {
   const t = String(sh || "").trim();
   if (/^am/i.test(t)) return "AM";
@@ -1526,11 +1536,11 @@ function hrShiftLabel(sh) {
   return t;
 }
 
-// One row per member check-in: Stake, Date of Service, Shift, Hours
+// One row per member check-in: Name, Stake, Date of Service, Shift, Hours
 function hrAddMemberDetailSheet(wb, sheetName, title, subtitle, detail) {
   const ws = wb.addWorksheet(sheetName);
-  const heads = ["Stake", "Date of Service", "Shift", "Hours"];
-  ws.columns = [{ width: 34 }, { width: 18 }, { width: 10 }, { width: 14 }];
+  const heads = ["Name", "Stake", "Date of Service", "Shift", "Hours"];
+  ws.columns = [{ width: 32 }, { width: 30 }, { width: 18 }, { width: 10 }, { width: 14 }];
   ws.getCell("A1").value = title;
   ws.getCell("A1").font = { bold: true, size: 14 };
   ws.getCell("A2").value = subtitle;
@@ -1546,35 +1556,36 @@ function hrAddMemberDetailSheet(wb, sheetName, title, subtitle, detail) {
   const sorted = detail.slice().sort((a, b) =>
     String(a.date).localeCompare(String(b.date)) ||
     a.stake.localeCompare(b.stake) ||
-    hrShiftLabel(a.shift).localeCompare(hrShiftLabel(b.shift)));
+    hrShiftLabel(a.shift).localeCompare(hrShiftLabel(b.shift)) ||
+    a.name.localeCompare(b.name));
   let r = 5, total = 0;
   sorted.forEach(d => {
     const [yy, mm, dd] = String(d.date).split("-").map(Number);
     const hrs = Math.round(d.hours * 100) / 100;
     total += hrs;
-    const vals = [d.stake, new Date(Date.UTC(yy, mm - 1, dd)), hrShiftLabel(d.shift), hrs];
+    const vals = [d.name, d.stake, new Date(Date.UTC(yy, mm - 1, dd)), hrShiftLabel(d.shift), hrs];
     vals.forEach((val, i) => {
       const c = ws.getCell(r, i + 1);
       c.value = val;
       c.border = HR_BORDER;
-      if (i === 1) { c.numFmt = "mm/dd/yyyy"; c.alignment = { horizontal: "center" }; }
-      if (i === 2) c.alignment = { horizontal: "center" };
-      if (i === 3) c.numFmt = "#,##0.00";
+      if (i === 2) { c.numFmt = "mm/dd/yyyy"; c.alignment = { horizontal: "center" }; }
+      if (i === 3) c.alignment = { horizontal: "center" };
+      if (i === 4) c.numFmt = "#,##0.00";
     });
     r++;
   });
   ws.getCell(r, 1).value = "Total";
-  ws.getCell(r, 4).value = sorted.length
-    ? { formula: `SUM(D5:D${r - 1})`, result: Math.round(total * 100) / 100 } : 0;
-  for (let i = 1; i <= 4; i++) {
+  ws.getCell(r, 5).value = sorted.length
+    ? { formula: `SUM(E5:E${r - 1})`, result: Math.round(total * 100) / 100 } : 0;
+  for (let i = 1; i <= 5; i++) {
     const c = ws.getCell(r, i);
     c.font = { bold: true };
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } };
     c.border = HR_BORDER;
-    if (i === 4) c.numFmt = "#,##0.00";
+    if (i === 5) c.numFmt = "#,##0.00";
   }
   ws.views = [{ state: "frozen", ySplit: 4 }];
-  ws.autoFilter = { from: "A4", to: "D4" };
+  ws.autoFilter = { from: "A4", to: "E4" };
   return ws;
 }
 
