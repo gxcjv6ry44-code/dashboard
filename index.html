@@ -540,7 +540,7 @@
     <div class="card">
       <div class="card-head">Year-End Report</div>
       <div class="card-body">
-        <p class="hr-note">Excel workbook with five tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake), Member Volunteers (by stake) and Member Volunteer Detail (every member check-in with name, stake, date, shift and hours).</p>
+        <p class="hr-note">Excel workbook with five tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake), Member Volunteers (by stake) and Member Volunteer Detail (every member check-in with name, stake, date, shift, people and hours).</p>
         <div class="hr-toolbar">
           <div class="field">
             <label>Year</label>
@@ -1444,7 +1444,7 @@ async function hrStakeTotals(from, to) {
     const bucket = r.youthGroup ? youth : member;
     const name = hrPretty(r.stake);
     bucket[name] = (bucket[name] || 0) + hrs;
-    if (!r.youthGroup) memberDetail.push({ name: hrCleanName(r.submittedBy), stake: name, date: r.serviceDate, shift: r.shift, hours: hrs });
+    if (!r.youthGroup) memberDetail.push({ name: hrCleanName(r.submittedBy), stake: name, date: r.serviceDate, shift: r.shift, people: parseInt(r.count, 10) || 0, hours: hrs });
   });
   return { youth, member, memberDetail };
 }
@@ -1536,11 +1536,11 @@ function hrShiftLabel(sh) {
   return t;
 }
 
-// One row per member check-in: Name, Stake, Date of Service, Shift, Hours
+// One row per member check-in: Name, Stake, Date of Service, Shift, People, Hours
 function hrAddMemberDetailSheet(wb, sheetName, title, subtitle, detail) {
   const ws = wb.addWorksheet(sheetName);
-  const heads = ["Name", "Stake", "Date of Service", "Shift", "Hours"];
-  ws.columns = [{ width: 32 }, { width: 30 }, { width: 18 }, { width: 10 }, { width: 14 }];
+  const heads = ["Name", "Stake", "Date of Service", "Shift", "People", "Hours"];
+  ws.columns = [{ width: 32 }, { width: 30 }, { width: 18 }, { width: 10 }, { width: 10 }, { width: 14 }];
   ws.getCell("A1").value = title;
   ws.getCell("A1").font = { bold: true, size: 14 };
   ws.getCell("A2").value = subtitle;
@@ -1558,34 +1558,37 @@ function hrAddMemberDetailSheet(wb, sheetName, title, subtitle, detail) {
     a.stake.localeCompare(b.stake) ||
     hrShiftLabel(a.shift).localeCompare(hrShiftLabel(b.shift)) ||
     a.name.localeCompare(b.name));
-  let r = 5, total = 0;
+  let r = 5, total = 0, totalPeople = 0;
   sorted.forEach(d => {
     const [yy, mm, dd] = String(d.date).split("-").map(Number);
     const hrs = Math.round(d.hours * 100) / 100;
     total += hrs;
-    const vals = [d.name, d.stake, new Date(Date.UTC(yy, mm - 1, dd)), hrShiftLabel(d.shift), hrs];
+    totalPeople += d.people;
+    const vals = [d.name, d.stake, new Date(Date.UTC(yy, mm - 1, dd)), hrShiftLabel(d.shift), d.people, hrs];
     vals.forEach((val, i) => {
       const c = ws.getCell(r, i + 1);
       c.value = val;
       c.border = HR_BORDER;
       if (i === 2) { c.numFmt = "mm/dd/yyyy"; c.alignment = { horizontal: "center" }; }
-      if (i === 3) c.alignment = { horizontal: "center" };
-      if (i === 4) c.numFmt = "#,##0.00";
+      if (i === 3 || i === 4) c.alignment = { horizontal: "center" };
+      if (i === 5) c.numFmt = "#,##0.00";
     });
     r++;
   });
   ws.getCell(r, 1).value = "Total";
-  ws.getCell(r, 5).value = sorted.length
-    ? { formula: `SUM(E5:E${r - 1})`, result: Math.round(total * 100) / 100 } : 0;
-  for (let i = 1; i <= 5; i++) {
+  ws.getCell(r, 5).value = sorted.length ? { formula: `SUM(E5:E${r - 1})`, result: totalPeople } : 0;
+  ws.getCell(r, 6).value = sorted.length
+    ? { formula: `SUM(F5:F${r - 1})`, result: Math.round(total * 100) / 100 } : 0;
+  for (let i = 1; i <= 6; i++) {
     const c = ws.getCell(r, i);
     c.font = { bold: true };
     c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } };
     c.border = HR_BORDER;
-    if (i === 5) c.numFmt = "#,##0.00";
+    if (i === 6) c.numFmt = "#,##0.00";
+    if (i === 5) c.alignment = { horizontal: "center" };
   }
   ws.views = [{ state: "frozen", ySplit: 4 }];
-  ws.autoFilter = { from: "A4", to: "E4" };
+  ws.autoFilter = { from: "A4", to: "F4" };
   return ws;
 }
 
