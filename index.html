@@ -540,7 +540,7 @@
     <div class="card">
       <div class="card-head">Year-End Report</div>
       <div class="card-body">
-        <p class="hr-note">Excel workbook with four tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake) and Member Volunteers (by stake). Each lists total hours for the year.</p>
+        <p class="hr-note">Excel workbook with five tabs: Service Missionaries, Full-Time Missionaries, Youth (by stake), Member Volunteers (by stake) and Member Volunteer Detail (every member check-in with stake, date, shift and hours).</p>
         <div class="hr-toolbar">
           <div class="field">
             <label>Year</label>
@@ -1437,15 +1437,16 @@ function hrLoadExcelLib() {
 // Stake totals from check-ins between two dates (inclusive)
 async function hrStakeTotals(from, to) {
   const rows = await hrFetchAll("hours_ledger",
-    `?select=stake,count,totalHours,youthGroup&serviceDate=gte.${from}&serviceDate=lte.${to}&order=serviceDate,checkinId`);
-  const youth = {}, member = {};
+    `?select=stake,count,totalHours,youthGroup,serviceDate,shift&serviceDate=gte.${from}&serviceDate=lte.${to}&order=serviceDate,checkinId`);
+  const youth = {}, member = {}, memberDetail = [];
   rows.forEach(r => {
     const hrs = r.totalHours != null ? Number(r.totalHours) : (parseInt(r.count, 10) || 0) * 2.5;
     const bucket = r.youthGroup ? youth : member;
     const name = hrPretty(r.stake);
     bucket[name] = (bucket[name] || 0) + hrs;
+    if (!r.youthGroup) memberDetail.push({ stake: name, date: r.serviceDate, shift: r.shift, hours: hrs });
   });
-  return { youth, member };
+  return { youth, member, memberDetail };
 }
 
 // Missionary hours for a date range of month values, grouped by person
@@ -1518,6 +1519,65 @@ function hrAddSheet(wb, sheetName, title, subtitle, colHeaders, rows) {
   return ws;
 }
 
+function hrShiftLabel(sh) {
+  const t = String(sh || "").trim();
+  if (/^am/i.test(t)) return "AM";
+  if (/^pm/i.test(t)) return "PM";
+  return t;
+}
+
+// One row per member check-in: Stake, Date of Service, Shift, Hours
+function hrAddMemberDetailSheet(wb, sheetName, title, subtitle, detail) {
+  const ws = wb.addWorksheet(sheetName);
+  const heads = ["Stake", "Date of Service", "Shift", "Hours"];
+  ws.columns = [{ width: 34 }, { width: 18 }, { width: 10 }, { width: 14 }];
+  ws.getCell("A1").value = title;
+  ws.getCell("A1").font = { bold: true, size: 14 };
+  ws.getCell("A2").value = subtitle;
+  ws.getCell("A2").font = { color: { argb: "FF595959" } };
+  heads.forEach((h, i) => {
+    const c = ws.getRow(4).getCell(i + 1);
+    c.value = h;
+    c.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
+    c.alignment = { horizontal: i === 0 ? "left" : "center" };
+    c.border = HR_BORDER;
+  });
+  const sorted = detail.slice().sort((a, b) =>
+    String(a.date).localeCompare(String(b.date)) ||
+    a.stake.localeCompare(b.stake) ||
+    hrShiftLabel(a.shift).localeCompare(hrShiftLabel(b.shift)));
+  let r = 5, total = 0;
+  sorted.forEach(d => {
+    const [yy, mm, dd] = String(d.date).split("-").map(Number);
+    const hrs = Math.round(d.hours * 100) / 100;
+    total += hrs;
+    const vals = [d.stake, new Date(Date.UTC(yy, mm - 1, dd)), hrShiftLabel(d.shift), hrs];
+    vals.forEach((val, i) => {
+      const c = ws.getCell(r, i + 1);
+      c.value = val;
+      c.border = HR_BORDER;
+      if (i === 1) { c.numFmt = "mm/dd/yyyy"; c.alignment = { horizontal: "center" }; }
+      if (i === 2) c.alignment = { horizontal: "center" };
+      if (i === 3) c.numFmt = "#,##0.00";
+    });
+    r++;
+  });
+  ws.getCell(r, 1).value = "Total";
+  ws.getCell(r, 4).value = sorted.length
+    ? { formula: `SUM(D5:D${r - 1})`, result: Math.round(total * 100) / 100 } : 0;
+  for (let i = 1; i <= 4; i++) {
+    const c = ws.getCell(r, i);
+    c.font = { bold: true };
+    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } };
+    c.border = HR_BORDER;
+    if (i === 4) c.numFmt = "#,##0.00";
+  }
+  ws.views = [{ state: "frozen", ySplit: 4 }];
+  ws.autoFilter = { from: "A4", to: "D4" };
+  return ws;
+}
+
 async function hrDownload(wb, filename) {
   const buf = await wb.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -1546,7 +1606,7 @@ async function downloadYearEnd() {
   hrSetStatus("hr-year-status", "Building the report…");
   try {
     await hrLoadExcelLib();
-    const [{ youth, member }, missionaries] = await Promise.all([
+    const [{ youth, member, memberDetail }, missionaries] = await Promise.all([
       hrStakeTotals(`${year}-01-01`, `${year}-12-31`),
       hrMissionaryHours(`${year}-01-01`, `${year}-12-31`)
     ]);
@@ -1560,6 +1620,7 @@ async function downloadYearEnd() {
     hrAddSheet(wb, "Full-Time Missionaries", "North Ogden Orchard — Full-Time Missionaries", sub, ["Name", col], people("Full-time"));
     hrAddSheet(wb, "Youth", "North Ogden Orchard — Youth Groups by Stake", sub, ["Stake", col], hrSortRows(youth).map(([n, h]) => [n, Math.round(h * 100) / 100]));
     hrAddSheet(wb, "Member Volunteers", "North Ogden Orchard — Member Volunteers by Stake", sub, ["Stake", col], hrSortRows(member).map(([n, h]) => [n, Math.round(h * 100) / 100]));
+    hrAddMemberDetailSheet(wb, "Member Volunteer Detail", "North Ogden Orchard — Member Volunteer Detail", sub, memberDetail);
     await hrDownload(wb, `Orchard_${year}_Year_End_Report.xlsx`);
 
     const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
